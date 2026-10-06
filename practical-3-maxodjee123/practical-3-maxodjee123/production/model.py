@@ -18,6 +18,8 @@
 
 # %%
 import argparse
+import os
+import mlflow
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -40,8 +42,10 @@ args = parser.parse_args()
 # "./" means "from where we are now"
 
 # %%
-df = pd.read_csv(args.trainingdata)
-print(df)
+with mlflow.start_run():
+    df = pd.read_csv(args.trainingdata)
+    print(df)
+    mlflow.log_param("dataset_path", args.trainingdata)
 
 # %% [markdown]
 # ## Split the data
@@ -56,17 +60,17 @@ print(df)
 # To help avoid this train_test_split will choose the rows for the 20% at random - which is important to keep it fair and avoid that problem.
 
 # %%
-#Pick out the columns we want to use as inputs
+# Pick out the columns we want to use as inputs
 X = df[['sepalLength', 'sepalWidth']].values
 Y = df['type'].values
-## Now lets take a look at  how many rows we have
-len(X)
 
 # And how many different types in each class, we should have 50 of each
 print(np.unique(Y, return_counts=True))
+mlflow.log_param("class_counts", str(np.unique(Y, return_counts=True)[1].tolist()))
 
-#Split the data and keep 20% back for testing later
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.20)
+# Split the data and keep 20% back for testing later
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.20, random_state=42)
+mlflow.log_param("test_size", 0.20)
 print("Train length", len(X_train))
 print("Test length", len(X_test))
 
@@ -75,7 +79,7 @@ print("Test length", len(X_test))
 # Now we fit the machine learning model we're going to use to our X and Y data.
 
 # %%
-model = DecisionTreeClassifier().fit(X_train, Y_train)
+model = DecisionTreeClassifier(random_state=42).fit(X_train, Y_train)
 
 # %% [markdown]
 # ## Evaluate model
@@ -86,6 +90,7 @@ model = DecisionTreeClassifier().fit(X_train, Y_train)
 testPredictions = model.predict(X_test)
 acc = np.average(testPredictions == Y_test)
 print("Accuracy", acc)
+mlflow.log_metric("accuracy", float(acc))
 
 # %% [markdown]
 # ### More thourough evaluation
@@ -111,7 +116,7 @@ plt.plot([0, 1], [0, 1], 'k--')
 # plot ROC curve for the different classes
 for idx, className in enumerate(df['type'].unique()):
 	fpr, tpr, thresholds = roc_curve(Y_test == className, Y_scores[:,idx])
-	seriesName = "ROC for " + className
+	seriesName = "ROC for " + str(className)
 	# Plot the FPR and TPR achieved by our model
 	plt.plot(fpr, tpr, label=seriesName)
 #Add a legend
@@ -120,6 +125,12 @@ plt.legend()
 #Compute the AUC
 auc = roc_auc_score(Y_test,Y_scores, multi_class='ovr')
 print('AUC', auc)
+mlflow.log_metric("roc_auc", float(auc))
+
+# Save and log a figure artifact
+fig.savefig("roc_curve.png")
+mlflow.log_artifact("roc_curve.png")
+os.remove("roc_curve.png")
 
 # %% [markdown]
 # ## Done
